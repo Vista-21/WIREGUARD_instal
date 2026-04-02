@@ -24,41 +24,9 @@ OS_VER=$(grep -oP '(?<=VERSION_ID=").+(?=")' /etc/os-release)
 
 echo "Detected: $OS_ID $OS_VER"
 
-# --- Проверка, установлен ли WireGuard ---
-if command -v wg >/dev/null 2>&1; then
-    echo "WireGuard is already installed. Skipping installation to avoid conflicts."
-    echo "If you want to reinstall, run: wg-clean"
-    exit 0
-fi
-
-# --- Автоматическая фиксация репозиториев для Debian 11/12 ---
-if [[ "$OS_ID" == "debian" && ( "$OS_VER" == "11" || "$OS_VER" == "12" ) ]]; then
-    echo "Debian $OS_VER detected — fixing repositories..."
-
-    echo "Removing broken backports entries..."
-    sed -i '/backports/d' /etc/apt/sources.list 2>/dev/null || true
-    sed -i '/backports/d' /etc/apt/sources.list.d/*.list 2>/dev/null || true
-    sed -i '/backports/d' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
-
-    echo "Removing duplicate repository files..."
-    rm -f /etc/apt/sources.list.d/default.list 2>/dev/null || true
-    rm -f /etc/apt/sources.list.d/updates.list 2>/dev/null || true
-
-    echo "Rebuilding /etc/apt/sources.list..."
-    cat > /etc/apt/sources.list <<EOF
-deb http://deb.debian.org/debian bullseye main contrib non-free
-deb http://deb.debian.org/debian bullseye-updates main contrib non-free
-deb http://security.debian.org/debian-security bullseye-security main contrib non-free
-EOF
-
-    echo "Updating APT..."
-    apt update
-else
-    echo "Non-Debian or unsupported Debian version detected — skipping repo fix."
-fi
-
-REPO="https://raw.githubusercontent.com/Vista-21/WIREGUARD_instal/main"
-
+###############################################
+# ЗАПРОС ПОРТА WIREGUARD — ПЕРЕМЕЩЁН ВВЕРХ
+###############################################
 echo
 read -p "Введите порт для WireGuard (по умолчанию 37821): " SERVER_PORT
 SERVER_PORT=${SERVER_PORT:-37821}
@@ -71,6 +39,44 @@ fi
 echo "WireGuard port set to: $SERVER_PORT"
 echo
 
+###############################################
+# ПРОВЕРКА, УСТАНОВЛЕН ЛИ WIREGUARD
+###############################################
+if command -v wg >/dev/null 2>&1; then
+    echo "WireGuard is already installed. Skipping installation to avoid conflicts."
+    echo "If you want to reinstall, run: wg-clean"
+    exit 0
+fi
+
+###############################################
+# ИСПРАВЛЕНИЕ РЕПОЗИТОРИЕВ DEBIAN 11/12
+###############################################
+if [[ "$OS_ID" == "debian" && ( "$OS_VER" == "11" || "$OS_VER" == "12" ) ]]; then
+    echo "Debian $OS_VER detected — fixing repositories..."
+
+    sed -i '/backports/d' /etc/apt/sources.list 2>/dev/null || true
+    sed -i '/backports/d' /etc/apt/sources.list.d/*.list 2>/dev/null || true
+    sed -i '/backports/d' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+
+    rm -f /etc/apt/sources.list.d/default.list 2>/dev/null || true
+    rm -f /etc/apt/sources.list.d/updates.list 2>/dev/null || true
+
+    cat > /etc/apt/sources.list <<EOF
+deb http://deb.debian.org/debian bullseye main contrib non-free
+deb http://deb.debian.org/debian bullseye-updates main contrib non-free
+deb http://security.debian.org/debian-security bullseye-security main contrib non-free
+EOF
+
+    apt update
+else
+    echo "Non-Debian or unsupported Debian version detected — skipping repo fix."
+fi
+
+REPO="https://raw.githubusercontent.com/Vista-21/WIREGUARD_instal/main"
+
+###############################################
+# УСТАНОВКА WIREGUARD
+###############################################
 echo "Updating system..."
 apt update
 
@@ -126,7 +132,6 @@ systemctl restart wg-quick@wg0
 ###############################################
 # УСТАНОВКА VK TURN PROXY
 ###############################################
-
 echo "Installing VK TURN Proxy..."
 
 WG_PORT=$(grep -oP '(?<=ListenPort = )\d+' /etc/wireguard/wg0.conf)
@@ -165,7 +170,6 @@ echo "VK TURN Proxy installed and running."
 ###############################################
 # СОЗДАЁМ vk-turn-clean
 ###############################################
-
 cat > /usr/local/bin/vk-turn-clean <<EOF
 #!/bin/bash
 systemctl stop vk-turn-proxy 2>/dev/null
