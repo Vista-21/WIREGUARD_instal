@@ -2,6 +2,41 @@
 
 set -e
 
+echo "Checking OS version..."
+OS_ID=$(grep -oP '(?<=^ID=).+' /etc/os-release | tr -d '"')
+OS_VER=$(grep -oP '(?<=VERSION_ID=").+(?=")' /etc/os-release)
+
+echo "Detected: $OS_ID $OS_VER"
+
+# --- Проверка, установлен ли WireGuard ---
+if command -v wg >/dev/null 2>&1; then
+    echo "WireGuard is already installed. Skipping installation to avoid conflicts."
+    echo "If you want to reinstall, run: wg-clean"
+    exit 0
+fi
+
+# --- Автоматическая фиксация репозиториев для Debian 11/12 ---
+if [[ "$OS_ID" == "debian" && ( "$OS_VER" == "11" || "$OS_VER" == "12" ) ]]; then
+    echo "Debian $OS_VER detected — fixing repositories..."
+
+    echo "Removing broken backports entries..."
+    sed -i '/backports/d' /etc/apt/sources.list 2>/dev/null || true
+    sed -i '/backports/d' /etc/apt/sources.list.d/*.list 2>/dev/null || true
+    sed -i '/backports/d' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+
+    echo "Rebuilding /etc/apt/sources.list..."
+    cat > /etc/apt/sources.list <<EOF
+deb http://deb.debian.org/debian bullseye main contrib non-free
+deb http://deb.debian.org/debian bullseye-updates main contrib non-free
+deb http://security.debian.org/debian-security bullseye-security main contrib non-free
+EOF
+
+    echo "Updating APT..."
+    apt update
+else
+    echo "Non-Debian or unsupported Debian version detected — skipping repo fix."
+fi
+
 REPO="https://raw.githubusercontent.com/Vista-21/WIREGUARD_instal/main"
 
 echo "Updating system..."
