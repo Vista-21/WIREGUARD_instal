@@ -49,7 +49,7 @@ PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -D FORWARD -o wg0 -j A
 EOF
 
 echo "Creating default clients..."
-wg-add-client ealme_test
+wg-add-client main_test
 wg-add-client user_test#1
 wg-add-client user_test#2
 
