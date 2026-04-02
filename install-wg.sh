@@ -40,6 +40,10 @@ if [[ "$OS_ID" == "debian" && ( "$OS_VER" == "11" || "$OS_VER" == "12" ) ]]; the
     sed -i '/backports/d' /etc/apt/sources.list.d/*.list 2>/dev/null || true
     sed -i '/backports/d' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
 
+    echo "Removing duplicate repository files..."
+    rm -f /etc/apt/sources.list.d/default.list 2>/dev/null || true
+    rm -f /etc/apt/sources.list.d/updates.list 2>/dev/null || true
+
     echo "Rebuilding /etc/apt/sources.list..."
     cat > /etc/apt/sources.list <<EOF
 deb http://deb.debian.org/debian bullseye main contrib non-free
