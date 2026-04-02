@@ -1,48 +1,66 @@
 #!/bin/bash
+set -e
 
-NAME="$1"
-IP_BASE="10.8.0."
-MTU=1280
-SERVER_PUB=$(cat /etc/wireguard/server_public.key)
-SERVER_PORT=37821
-SERVER_IP=$(curl -4 -s ifconfig.me)
+CLIENTS_DIR="${HOME}/wg-clients"
+WG_CONF="/etc/wireguard/wg0.conf"
+SERVER_IP_NET="10.8.0.0/24"
 
-if [ -z "$NAME" ]; then
-    echo "Usage: wg-add-client <client_name>"
-    exit 1
+if [ -z "$1" ]; then
+  echo "Usage: wg-add-client <name>"
+  exit 1
 fi
 
-LAST=$(grep AllowedIPs /etc/wireguard/wg0.conf | awk -F'[ ./]' '{print $6}' | sort -n | tail -1)
-if [ -z "$LAST" ]; then LAST=1; fi
-NEXT=$((LAST+1))
-IP="${IP_BASE}${NEXT}"
+NAME="$1"
+CLIENT_CONF="${CLIENTS_DIR}/${NAME}.conf"
 
-wg genkey | tee /etc/wireguard/${NAME}_private.key | wg pubkey > /etc/wireguard/${NAME}_public.key
+if [ -f "$CLIENT_CONF" ]; then
+  echo "Client ${NAME} already exists: $CLIENT_CONF"
+  exit 1
+fi
 
-PRIV=$(cat /etc/wireguard/${NAME}_private.key)
-PUB=$(cat /etc/wireguard/${NAME}_public.key)
+mkdir -p "$CLIENTS_DIR"
 
-cat >> /etc/wireguard/wg0.conf <<EOF
+# Генерация ключей
+CLIENT_PRIV=$(wg genkey)
+CLIENT_PUB=$(echo "$CLIENT_PRIV" | wg pubkey)
+PRESHARED_KEY=$(wg genpsk)
+
+# Определение следующего IP
+LAST_IP=$(grep -oP '10\.8\.0\.\d+' "$WG_CONF" | sort -t. -k4 -n | tail -n1 | awk -F. '{print $4}')
+NEXT_IP=$((LAST_IP+1))
+CLIENT_IP="10.8.0.${NEXT_IP}/32"
+
+SERVER_PUB=$(grep -oP '(?<=^PublicKey = ).+' "$WG_CONF" | head -n1)
+SERVER_ENDPOINT_PORT=$(grep -oP '(?<=^ListenPort = )\d+' "$WG_CONF")
+SERVER_ENDPOINT_HOST=$(hostname -I | awk '{print $1}')
+
+# Добавляем peer в wg0.conf
+cat >> "$WG_CONF" <<EOF
 
 [Peer]
-PublicKey = $PUB
-AllowedIPs = $IP/32
+# $NAME
+PublicKey = $CLIENT_PUB
+PresharedKey = $PRESHARED_KEY
+AllowedIPs = ${CLIENT_IP}
 EOF
 
-mkdir -p ~/wg-clients
-cat > ~/wg-clients/${NAME}.conf <<EOF
+# Конфиг клиента
+cat > "$CLIENT_CONF" <<EOF
 [Interface]
-PrivateKey = $PRIV
-Address = $IP/32
-DNS = 8.8.8.8
-MTU = $MTU
+PrivateKey = $CLIENT_PRIV
+Address = $CLIENT_IP
+DNS = 1.1.1.1
 
 [Peer]
 PublicKey = $SERVER_PUB
-Endpoint = ${SERVER_IP}:$SERVER_PORT
-AllowedIPs = 0.0.0.0/0
-PersistentKeepalive = 0
+PresharedKey = $PRESHARED_KEY
+Endpoint = ${SERVER_ENDPOINT_HOST}:${SERVER_ENDPOINT_PORT}
+AllowedIPs = 0.0.0.0/0, ::/0
+PersistentKeepalive = 25
 EOF
 
+chmod 600 "$CLIENT_CONF"
+
 systemctl restart wg-quick@wg0
-echo "Client created: ~/wg-clients/${NAME}.conf"
+
+echo "Client created: $CLIENT_CONF"
