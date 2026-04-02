@@ -25,15 +25,23 @@ OS_VER=$(grep -oP '(?<=VERSION_ID=").+(?=")' /etc/os-release)
 echo "Detected: $OS_ID $OS_VER"
 
 ###############################################
-# ЗАПРОС ПОРТА WIREGUARD — ПЕРЕМЕЩЁН ВВЕРХ
+# ЗАПРОС ПОРТА WIREGUARD (с проверкой stdin)
 ###############################################
-echo
-read -p "Введите порт для WireGuard (по умолчанию 37821): " SERVER_PORT
-SERVER_PORT=${SERVER_PORT:-37821}
+DEFAULT_PORT=37821
 
-if ! [[ "$SERVER_PORT" =~ ^[0-9]+$ ]] || [ "$SERVER_PORT" -lt 1 ] || [ "$SERVER_PORT" -gt 65535 ]; then
-    echo "Некорректный порт. Использую 37821."
-    SERVER_PORT=37821
+if [ -t 0 ]; then
+    echo
+    read -p "Введите порт для WireGuard (по умолчанию $DEFAULT_PORT): " SERVER_PORT
+    SERVER_PORT=${SERVER_PORT:-$DEFAULT_PORT}
+
+    if ! [[ "$SERVER_PORT" =~ ^[0-9]+$ ]] || [ "$SERVER_PORT" -lt 1 ] || [ "$SERVER_PORT" -gt 65535 ]; then
+        echo "Некорректный порт. Использую $DEFAULT_PORT."
+        SERVER_PORT=$DEFAULT_PORT
+    fi
+else
+    echo
+    echo "stdin недоступен — использую порт по умолчанию $DEFAULT_PORT"
+    SERVER_PORT=$DEFAULT_PORT
 fi
 
 echo "WireGuard port set to: $SERVER_PORT"
