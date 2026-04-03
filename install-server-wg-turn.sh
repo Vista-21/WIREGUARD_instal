@@ -43,7 +43,7 @@ OS_CODENAME=$(grep -oP '(?<=VERSION_CODENAME=).+' /etc/os-release)
 info "Detected: $OS_ID ($OS_CODENAME)"
 
 ###############################################
-# ЗАПРОС ПОРТА С ПРОВЕРКОЙ ЗАНЯТОСТИ
+# ЗАПРОС ПОРТА
 ###############################################
 DEFAULT_PORT=37821
 
@@ -79,7 +79,7 @@ ok "WireGuard port set to: $SERVER_PORT"
 echo
 
 ###############################################
-# ПРОВЕРКА, УСТАНОВЛЕН ЛИ WIREGUARD
+# ПРОВЕРКА УСТАНОВКИ
 ###############################################
 if command -v wg >/dev/null 2>&1; then
     warn "WireGuard уже установлен. Используйте wg-clean для удаления."
@@ -87,7 +87,7 @@ if command -v wg >/dev/null 2>&1; then
 fi
 
 ###############################################
-# ИСПРАВЛЕНИЕ РЕПОЗИТОРИЕВ DEBIAN (БЕЗ BACKPORTS)
+# ЧИСТЫЕ РЕПОЗИТОРИИ DEBIAN
 ###############################################
 if [[ "$OS_ID" == "debian" ]]; then
     info "Fixing Debian repositories..."
@@ -117,7 +117,7 @@ apt install -y wireguard iptables curl wget qrencode whiptail
 ok "WireGuard installed"
 
 ###############################################
-# УСТАНОВКА NANO
+# NANO
 ###############################################
 if ! command -v nano >/dev/null 2>&1; then
     info "Installing nano..."
@@ -143,7 +143,7 @@ chmod +x /usr/local/bin/wg-*
 ok "Management scripts installed"
 
 ###############################################
-# ГЕНЕРАЦИЯ КЛЮЧЕЙ
+# КЛЮЧИ
 ###############################################
 info "Generating server keys..."
 wg genkey | tee /etc/wireguard/server_private.key | wg pubkey > /etc/wireguard/server_public.key
@@ -158,7 +158,7 @@ SERVER_IP=$(curl -4 -s ifconfig.me)
 export SERVER_IP
 
 ###############################################
-# СОЗДАНИЕ wg0.conf
+# wg0.conf
 ###############################################
 WG_ADDR="10.8.0.1/24"
 MTU=1280
@@ -177,7 +177,7 @@ EOF
 ok "wg0.conf created"
 
 ###############################################
-# СОЗДАНИЕ КЛИЕНТОВ
+# КЛИЕНТЫ
 ###############################################
 info "Creating default clients..."
 wg-add-client main_test
@@ -188,6 +188,21 @@ ok "Clients created"
 systemctl enable wg-quick@wg0
 systemctl restart wg-quick@wg0
 ok "WireGuard started"
+
+###############################################
+# QR-КОД ДЛЯ ПЕРВОГО КЛИЕНТА
+###############################################
+FIRST_CLIENT="main_test"
+CLIENT_CONF="$HOME/wg-clients/${FIRST_CLIENT}.conf"
+
+if [ -f "$CLIENT_CONF" ]; then
+    info "QR code for first client ($FIRST_CLIENT):"
+    qrencode -t ansiutf8 < "$CLIENT_CONF"
+    echo
+    ok "QR code displayed above"
+else
+    warn "Client config $CLIENT_CONF not found — QR skipped"
+fi
 
 ###############################################
 # АРХИТЕКТУРА
@@ -204,7 +219,7 @@ esac
 ok "Detected architecture: $ARCH"
 
 ###############################################
-# УСТАНОВКА VK TURN PROXY
+# VK TURN PROXY
 ###############################################
 info "Installing VK TURN Proxy..."
 
