@@ -53,7 +53,6 @@ get_free_port() {
     local MAX_ATTEMPTS=3
 
     while true; do
-        # Попытка интерактивного ввода с таймаутом
         if read -t 5 -p "Введите порт для WireGuard (по умолчанию $DEFAULT_PORT): " PORT; then
             PORT=${PORT:-$DEFAULT_PORT}
         else
@@ -61,7 +60,6 @@ get_free_port() {
             PORT=$DEFAULT_PORT
         fi
 
-        # Проверка числа
         if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
             error "Порт должен быть числом"
             ((ATTEMPTS++))
@@ -73,7 +71,6 @@ get_free_port() {
             continue
         fi
 
-        # Проверка занятости
         if ss -tuln | grep -q ":$PORT "; then
             PROC=$(ss -tulnp | grep ":$PORT " | awk -F '"' '{print $2}')
             error "Порт $PORT уже используется процессом: $PROC"
@@ -152,12 +149,13 @@ mkdir -p ~/wg-clients
 # СКАЧИВАНИЕ СКРИПТОВ
 ###############################################
 info "Downloading management scripts..."
-curl -s -o /usr/local/bin/wg-add-client $REPO/wg-add-client.sh
-curl -s -o /usr/local/bin/wg-del-client $REPO/wg-del-client.sh
-curl -s -o /usr/local/bin/wg-peers      $REPO/wg-peers.sh
-curl -s -o /usr/local/bin/wg-clean      $REPO/wg-clean.sh
-curl -s -o /usr/local/bin/wg-menu       $REPO/wg-menu
-chmod +x /usr/local/bin/wg-*
+curl -s -o /usr/local/bin/wg-add-client     $REPO/wg-add-client.sh
+curl -s -o /usr/local/bin/wg-del-client     $REPO/wg-del-client.sh
+curl -s -o /usr/local/bin/wg-peers          $REPO/wg-peers.sh
+curl -s -o /usr/local/bin/wg-clean          $REPO/wg-clean.sh
+curl -s -o /usr/local/bin/wg-menu           $REPO/wg-menu
+curl -s -o /usr/local/bin/vk-turn-clean     $REPO/vk-turn-clean.sh
+chmod +x /usr/local/bin/wg-* /usr/local/bin/vk-turn-clean
 ok "Management scripts installed"
 
 ###############################################
