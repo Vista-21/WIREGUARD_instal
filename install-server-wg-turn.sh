@@ -43,50 +43,38 @@ OS_CODENAME=$(grep -oP '(?<=VERSION_CODENAME=).+' /etc/os-release)
 info "Detected: $OS_ID ($OS_CODENAME)"
 
 ###############################################
-# ЗАПРОС ПОРТА (УСТОЙЧИВАЯ ВЕРСИЯ)
+# ЗАПРОС ПОРТА (ИНТЕРАКТИВ + АВТО)
 ###############################################
 DEFAULT_PORT=37821
 
 get_free_port() {
     local PORT
-    local ATTEMPTS=0
-    local MAX_ATTEMPTS=3
 
-    while true; do
-        if read -t 5 -p "Введите порт для WireGuard (по умолчанию $DEFAULT_PORT): " PORT; then
+    if [ -t 0 ]; then
+        # stdin доступен → интерактивный ввод
+        while true; do
+            read -p "Введите порт для WireGuard (по умолчанию $DEFAULT_PORT): " PORT
             PORT=${PORT:-$DEFAULT_PORT}
-        else
-            warn "stdin не отвечает — выбран порт по умолчанию"
-            PORT=$DEFAULT_PORT
-        fi
 
-        if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
-            error "Порт должен быть числом"
-            ((ATTEMPTS++))
-            if ((ATTEMPTS >= MAX_ATTEMPTS)); then
-                warn "Слишком много неверных попыток — выбран порт по умолчанию"
-                PORT=$DEFAULT_PORT
-                break
+            if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
+                error "Порт должен быть числом"
+                continue
             fi
-            continue
-        fi
 
-        if ss -tuln | grep -q ":$PORT "; then
-            PROC=$(ss -tulnp | grep ":$PORT " | awk -F '"' '{print $2}')
-            error "Порт $PORT уже используется процессом: $PROC"
-            ((ATTEMPTS++))
-            if ((ATTEMPTS >= MAX_ATTEMPTS)); then
-                warn "Порт занят — выбран порт по умолчанию"
-                PORT=$DEFAULT_PORT
-                break
+            if ss -tuln | grep -q ":$PORT "; then
+                PROC=$(ss -tulnp | grep ":$PORT " | awk -F '"' '{print $2}')
+                error "Порт $PORT уже используется процессом: $PROC"
+                continue
             fi
-            continue
-        fi
 
-        break
-    done
-
-    echo "$PORT"
+            echo "$PORT"
+            return
+        done
+    else
+        # stdin нет → автоматический режим
+        warn "stdin недоступен — выбран порт по умолчанию"
+        echo "$DEFAULT_PORT"
+    fi
 }
 
 SERVER_PORT=$(get_free_port)
