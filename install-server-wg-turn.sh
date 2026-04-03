@@ -43,26 +43,29 @@ OS_CODENAME=$(grep -oP '(?<=VERSION_CODENAME=).+' /etc/os-release)
 info "Detected: $OS_ID ($OS_CODENAME)"
 
 ###############################################
-# ЗАПРОС ПОРТА
+# ЗАПРОС ПОРТА (С ЗАЩИТОЙ)
 ###############################################
 DEFAULT_PORT=37821
 
 get_free_port() {
     local PORT
+
     while true; do
-        if [ -t 0 ]; then
-            read -p "Введите порт для WireGuard (по умолчанию $DEFAULT_PORT): " PORT
+        # Попытка интерактивного ввода с таймаутом
+        if read -t 1 -p "Введите порт для WireGuard (по умолчанию $DEFAULT_PORT): " PORT; then
             PORT=${PORT:-$DEFAULT_PORT}
         else
-            warn "stdin недоступен — порт выбран автоматически"
+            warn "stdin не отвечает — выбран порт по умолчанию"
             PORT=$DEFAULT_PORT
         fi
 
+        # Проверка числа
         if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
             error "Порт должен быть числом"
             continue
         fi
 
+        # Проверка занятости
         if ss -tuln | grep -q ":$PORT "; then
             PROC=$(ss -tulnp | grep ":$PORT " | awk -F '"' '{print $2}')
             error "Порт $PORT уже используется процессом: $PROC"
