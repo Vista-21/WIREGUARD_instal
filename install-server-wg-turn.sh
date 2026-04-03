@@ -21,7 +21,7 @@ error() { echo -e "${RED}[ERR ]${NC} $1"; }
 ###############################################
 clear
 cat << "EOF"
- __        ___           ____                          _ 
+ __        ___           ____                          _
  \ \      / (_)_ __     / ___|___  _ ____   _____ _ __| |
   \ \ /\ / /| | '_ \   | |   / _ \| '_ \ \ / / _ \ '__| |
    \ V  V / | | | | |  | |__| (_) | | | \ V /  __/ |  | |
@@ -39,8 +39,8 @@ sleep 1
 ###############################################
 info "Checking OS version..."
 OS_ID=$(grep -oP '(?<=^ID=).+' /etc/os-release | tr -d '"')
-OS_VER=$(grep -oP '(?<=VERSION_ID=").+(?=")' /etc/os-release)
-info "Detected: $OS_ID $OS_VER"
+OS_CODENAME=$(grep -oP '(?<=VERSION_CODENAME=).+' /etc/os-release)
+info "Detected: $OS_ID ($OS_CODENAME)"
 
 ###############################################
 # ЗАПРОС ПОРТА С ПРОВЕРКОЙ ЗАНЯТОСТИ
@@ -89,20 +89,13 @@ fi
 ###############################################
 # ИСПРАВЛЕНИЕ РЕПОЗИТОРИЕВ DEBIAN
 ###############################################
-if [[ "$OS_ID" == "debian" && ( "$OS_VER" == "11" || "$OS_VER" == "12" ) ]]; then
+if [[ "$OS_ID" == "debian" ]]; then
     info "Fixing Debian repositories..."
 
-    sed -i '/backports/d' /etc/apt/sources.list 2>/dev/null || true
-    sed -i '/backports/d' /etc/apt/sources.list.d/*.list 2>/dev/null || true
-    sed -i '/backports/d' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
-
-    rm -f /etc/apt/sources.list.d/default.list 2>/dev/null || true
-    rm -f /etc/apt/sources.list.d/updates.list 2>/dev/null || true
-
     cat > /etc/apt/sources.list <<EOF
-deb http://deb.debian.org/debian bullseye main contrib non-free
-deb http://deb.debian.org/debian bullseye-updates main contrib non-free
-deb http://security.debian.org/debian-security bullseye-security main contrib non-free
+deb http://deb.debian.org/debian $OS_CODENAME main contrib non-free
+deb http://deb.debian.org/debian $OS_CODENAME-updates main contrib non-free
+deb http://security.debian.org/debian-security $OS_CODENAME-security main contrib non-free
 EOF
 
     apt update
@@ -130,6 +123,7 @@ curl -s -o /usr/local/bin/wg-add-client $REPO/wg-add-client.sh
 curl -s -o /usr/local/bin/wg-del-client $REPO/wg-del-client.sh
 curl -s -o /usr/local/bin/wg-peers      $REPO/wg-peers.sh
 curl -s -o /usr/local/bin/wg-clean      $REPO/wg-clean.sh
+curl -s -o /usr/local/bin/wg-menu       $REPO/wg-menu
 chmod +x /usr/local/bin/wg-*
 ok "Management scripts installed"
 
@@ -143,16 +137,22 @@ SERVER_PUB=$(cat /etc/wireguard/server_public.key)
 ok "Keys generated"
 
 ###############################################
+# ОПРЕДЕЛЕНИЕ ВНЕШНЕГО IP
+###############################################
+SERVER_IP=$(curl -4 -s ifconfig.me)
+export SERVER_IP
+
+###############################################
 # СОЗДАНИЕ wg0.conf
 ###############################################
-SERVER_IP="10.8.0.1/24"
+WG_ADDR="10.8.0.1/24"
 MTU=1280
 IFACE=$(ip route get 1.1.1.1 | awk '{print $5; exit}')
 
 info "Creating wg0.conf..."
 cat > /etc/wireguard/wg0.conf <<EOF
 [Interface]
-Address = $SERVER_IP
+Address = $WG_ADDR
 ListenPort = $SERVER_PORT
 PrivateKey = $SERVER_PRIV
 MTU = $MTU
@@ -166,8 +166,8 @@ ok "wg0.conf created"
 ###############################################
 info "Creating default clients..."
 wg-add-client main_test
-wg-add-client user_test#1
-wg-add-client user_test#2
+wg-add-client user_test-1
+wg-add-client user_test-2
 ok "Clients created"
 
 systemctl enable wg-quick@wg0
@@ -223,101 +223,6 @@ systemctl daemon-reload
 systemctl enable vk-turn-proxy
 systemctl start vk-turn-proxy
 ok "VK TURN Proxy installed and running"
-
-###############################################
-# СОЗДАНИЕ vk-turn-clean
-###############################################
-cat > /usr/local/bin/vk-turn-clean <<EOF
-#!/bin/bash
-systemctl stop vk-turn-proxy 2>/dev/null
-systemctl disable vk-turn-proxy 2>/dev/null
-rm -f /etc/systemd/system/vk-turn-proxy.service
-rm -rf /opt/vk-turn-proxy
-systemctl daemon-reload
-echo "VK TURN Proxy fully removed."
-EOF
-
-chmod +x /usr/local/bin/vk-turn-clean
-ok "vk-turn-clean created"
-
-###############################################
-# СОЗДАНИЕ TUI wg-menu
-###############################################
-cat > /usr/local/bin/wg-menu <<'EOF'
-#!/bin/bash
-
-menu() {
-    whiptail --title "WireGuard Management" --menu "Выберите действие:" 20 60 10 \
-    "1" "Добавить клиента" \
-    "2" "Удалить клиента" \
-    "3" "Показать список клиентов" \
-    "4" "Показать QR клиента" \
-    "5" "Перезапустить WireGuard" \
-    "6" "Статус сервисов" \
-    "7" "Удалить vk-turn-proxy" \
-    "8" "Выход" 3>&1 1>&2 2>&3
-}
-
-while true; do
-    CHOICE=$(menu)
-
-    case $CHOICE in
-        1)
-            NAME=$(whiptail --inputbox "Введите имя клиента:" 10 60 3>&1 1>&2 2>&3)
-            [ -n "$NAME" ] && wg-add-client "$NAME" && whiptail --msgbox "Клиент $NAME создан." 10 60
-            ;;
-
-        2)
-            NAME=$(whiptail --inputbox "Введите имя клиента для удаления:" 10 60 3>&1 1>&2 2>&3)
-            [ -n "$NAME" ] && wg-del-client "$NAME" && whiptail --msgbox "Клиент $NAME удалён." 10 60
-            ;;
-
-        3)
-            LIST=$(wg-peers)
-            whiptail --msgbox "$LIST" 25 80
-            ;;
-
-        4)
-            NAME=$(whiptail --inputbox "Введите имя клиента для QR:" 10 60 3>&1 1>&2 2>&3)
-            CONF=~/wg-clients/$NAME.conf
-            if [ -f "$CONF" ]; then
-                qrencode -t ANSIUTF8 < "$CONF" | whiptail --title "QR $NAME" --msgbox "$(cat)" 30 80
-            else
-                whiptail --msgbox "Файл $CONF не найден." 10 60
-            fi
-            ;;
-
-        5)
-            systemctl restart wg-quick@wg0
-            whiptail --msgbox "WireGuard перезапущен." 10 60
-            ;;
-
-        6)
-            STATUS=$(systemctl status wg-quick@wg0 --no-pager)
-            STATUS2=$(systemctl status vk-turn-proxy --no-pager 2>/dev/null || echo "vk-turn-proxy не установлен")
-            whiptail --msgbox "$STATUS\n\n$STATUS2" 30 90
-            ;;
-
-        7)
-            vk-turn-clean
-            whiptail --msgbox "vk-turn-proxy удалён." 10 60
-            ;;
-
-        8)
-            exit 0
-            ;;
-    esac
-done
-EOF
-
-chmod +x /usr/local/bin/wg-menu
-ok "wg-menu created"
-
-###############################################
-# QR-КОД ДЛЯ ПЕРВОГО КЛИЕНТА
-###############################################
-info "Generating QR for main_test..."
-qrencode -t ANSIUTF8 < ~/wg-clients/main_test.conf
 
 ###############################################
 # ФИНАЛ
